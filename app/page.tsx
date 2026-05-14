@@ -1,65 +1,115 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState } from 'react';
+import { GameState, GameResponse, createInitialState } from '@/lib/gameState';
+import GameBoard from '@/components/GameBoard';
+import StatusBar from '@/components/StatusBar';
+
+const OPENING_NARRATION = `The morning air smells of river mud and possibility. It is May 1st, 1848, and the wagon town of Independence, Missouri hums with the chaotic energy of a thousand souls about to do something irreversible. Your party — Eleanor, Thomas, young Clara, and the quietly capable Josiah — stand beside your loaded wagon, watching the first groups of emigrants file westward into the endless green prairie.
+
+The trail agent tips his hat and hands you a battered pamphlet: "Two thousand miles to Oregon City. Good luck." Clara tugs at your sleeve and points at the horizon, where the grass bends in waves like the surface of some enormous, indifferent sea. It is time to go.`;
+
+const OPENING_CHOICES = [
+  'Set out at a steady pace',
+  'Spend the day buying more supplies',
+  'Talk to other emigrants first',
+  'Study the map carefully before leaving',
+];
+
+export default function HomePage() {
+  const [gameState, setGameState] = useState<GameState>(createInitialState);
+  const [narration, setNarration] = useState(OPENING_NARRATION);
+  const [choices, setChoices] = useState(OPENING_CHOICES);
+  const [tombstone, setTombstone] = useState<string | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleChoice(choice: string) {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: gameState, choice }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Unknown error');
+      }
+
+      const data: GameResponse = await res.json();
+      setGameState(data.state);
+      setNarration(data.narration);
+      setChoices(data.choices);
+      setTombstone(data.tombstone);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong on the trail.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetGame() {
+    setGameState(createInitialState());
+    setNarration(OPENING_NARRATION);
+    setChoices(OPENING_CHOICES);
+    setTombstone(undefined);
+    setError(null);
+  }
+
+  if (gameState.gameOver) {
+    return (
+      <div className="end-screen">
+        <div className="end-inner">
+          <h1 className="end-title">{gameState.won ? 'You Reached Oregon!' : 'The Trail Has Claimed You'}</h1>
+          <div className="end-narration">
+            <p>{narration}</p>
+          </div>
+          {gameState.gameOverReason && (
+            <p className="end-reason">{gameState.gameOverReason}</p>
+          )}
+          <div className="end-stats">
+            <p>Miles traveled: {gameState.milesFromStart}</p>
+            <p>Days on trail: {gameState.dayNumber}</p>
+            <p>Survivors: {gameState.party.filter(m => m.health !== 'dead').map(m => m.name).join(', ') || 'None'}</p>
+          </div>
+          <button className="choice-btn" onClick={resetGame}>
+            Begin Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="game-layout">
+      <header className="game-header">
+        <h1 className="game-title">The Long Road West</h1>
+        <p className="game-subtitle">Oregon Trail · 1848</p>
+        <p className="game-instructions">An interactive story — read each scene, then pick a choice or write your own action to shape what happens next.</p>
+      </header>
+
+      <main className="game-main">
+        <div className="game-content">
+          <GameBoard
+            narration={narration}
+            choices={choices}
+            loading={loading}
+            onChoice={handleChoice}
+            tombstone={tombstone}
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+        <StatusBar state={gameState} />
       </main>
+
+      {error && (
+        <div className="error-banner">
+          Trail error: {error}
+        </div>
+      )}
     </div>
   );
 }
